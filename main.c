@@ -11,8 +11,6 @@
 #define MAX_INPUT_LENGTH 100
 
 pid_t foreground_process = 0;
-pid_t session_pid = 0;
-
 int foreground_pid = 0; // Variável para armazenar o PID do processo de foreground em execução
 
 // Função de tratamento de sinal para os sinais SIGINT, SIGQUIT e SIGTSTP
@@ -28,8 +26,6 @@ void signal_handler(int signum)
     {
         // Se não houver processo de foreground em execução, imprima uma mensagem de aviso
         printf("Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!!\n");
-        printf("acsh> "); // Exibir o prompt novamente
-        fflush(stdout);
     }
 }
 
@@ -82,14 +78,6 @@ void process_input(char *input)
     {
         commands[num_commands++] = token;
         token = strtok(NULL, "<3");
-    }
-
-    // Cria uma nova sessão para os processos de background
-    pid_t session_id = setsid();
-    if (session_id < 0)
-    {
-        perror("Erro ao criar nova sessão");
-        exit(1);
     }
 
     // Configura o tratamento do sinal SIGUSR1
@@ -152,10 +140,7 @@ int main()
         if (strcmp(input, "exit") == 0)
         {
             // Finaliza todos os processos de background na mesma sessão
-            if (session_pid != 0)
-            {
-                kill(-session_pid, SIGUSR1);
-            }
+            kill(0, SIGUSR1);
             break;
         }
 
@@ -195,9 +180,6 @@ int main()
 
         // Processa a linha de comando
         process_input(input);
-
-        // Atualiza o PID da sessão atual
-        session_pid = getpid();
     }
 
     return 0;
