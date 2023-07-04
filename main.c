@@ -34,9 +34,9 @@ int session_process_value = 0;
 
 // Função de tratamento de sinal para os sinais SIGINT, SIGQUIT e SIGTSTP
 void signal_handler(int signum);
-void ExecutaComando(char **args, int foreground, tBackgroundProcess *bp);
+void ExecutaComando(char **args, int foreground);
 void handle_sigusr1(int signum);
-void TrataEntrada(char *input, tBackgroundProcess *bp);
+void TrataEntrada(char *input);
 
 int main()
 {
@@ -107,7 +107,7 @@ int main()
         }
 
         // Processa a linha de comando
-        TrataEntrada(entrada, bp);
+        TrataEntrada(entrada);
         session_process_value++;
     }
 
@@ -130,7 +130,7 @@ void signal_handler(int signum)
     }
 }
 
-void ExecutaComando(char **args, int foreground, tBackgroundProcess *bp)
+void ExecutaComando(char **args, int foreground)
 {
     pid_t pid = fork();
 
@@ -147,7 +147,7 @@ void ExecutaComando(char **args, int foreground, tBackgroundProcess *bp)
             // Configura o grupo de processos para o processo filho em foreground
             setpgid(0, 0);
         }
-
+        //loop para achar onde colocar o novo processo em background, colocando a sessão e seu pid
         for (int i = 0; i < 1000; i++)
         {
             if (bp[i].background_process_id == -1)
@@ -225,7 +225,7 @@ void handle_sigusr1(int signum)
     exit(0);
 }
 
-void TrataEntrada(char *input, tBackgroundProcess *bp)
+void TrataEntrada(char *input)
 {
     char *comandos[MAX_COMMANDS];
     int num_comandos = 0;
@@ -268,6 +268,6 @@ void TrataEntrada(char *input, tBackgroundProcess *bp)
         args[num_args] = NULL;
 
         // Executa o comando
-        ExecutaComando(args, foreground, bp);
+        ExecutaComando(args, foreground);
     }
 }
