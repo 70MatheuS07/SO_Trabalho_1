@@ -10,23 +10,51 @@
 #define MAX_ARGS 10
 #define MAX_INPUT_LENGTH 100
 
+typedef struct BackgroundProcess
+{
+    pid_t background_process_id;
+    pid_t session_process_id;
+
+} tBackgroundProcess;
+
 pid_t foreground_process = 0;
-int foreground_pid = 0; // Variável para armazenar o PID do processo de foreground em execução
+int foreground_pid = 0;  // Variável para armazenar o PID do processo de foreground em execução
+pid_t process_group = 0; // Variável para armazenar o PID do grupo de processos em execução
+
+// Cria o vetor de struct.
+tBackgroundProcess *bp;
+
+void InicializaBP(tBackgroundProcess **bp)
+{
+    *bp = calloc(1000, sizeof(tBackgroundProcess));
+}
+
+// inteiro global responsavel por diferenciar sessões.
+int session_process_value = 0;
 
 // Função de tratamento de sinal para os sinais SIGINT, SIGQUIT e SIGTSTP
 void signal_handler(int signum);
-void ExecutaComando(char **args, int foreground);
+void ExecutaComando(char **args, int foreground, tBackgroundProcess *bp);
 void handle_sigusr1(int signum);
-void TrataEntrada(char *input);
+void TrataEntrada(char *input, tBackgroundProcess *bp);
 
 int main()
 {
+    InicializaBP(&bp);
+
+    for (int i = 0; i < 1000; i++)
+    {
+        bp[i].background_process_id = -1;
+        bp[i].session_process_id = -1;
+    }
+
     // Configurar os manipuladores de sinal para SIGINT, SIGQUIT e SIGTSTP
     signal(SIGINT, signal_handler);
     signal(SIGQUIT, signal_handler);
     signal(SIGTSTP, signal_handler);
 
     char entrada[MAX_INPUT_LENGTH];
+
     while (1)
     {
         printf("acsh> ");
@@ -44,8 +72,11 @@ int main()
         // Verifica se a operação interna "exit" foi digitada
         if (strcmp(entrada, "exit") == 0)
         {
-            // Finaliza todos os processos de background na mesma sessão
-            kill(0, SIGUSR1);
+            // Finaliza todos os processos em execução em segundo plano
+            if (process_group != 0)
+            {
+                kill(-process_group, SIGTERM);
+            }
             break;
         }
 
@@ -75,14 +106,13 @@ int main()
             continue;
         }
 
-
         // Processa a linha de comando
-        TrataEntrada(entrada);
+        TrataEntrada(entrada, bp);
+        session_process_value++;
     }
 
     return 0;
 }
-
 
 // Função de tratamento de sinal para os sinais SIGINT, SIGQUIT e SIGTSTP
 void signal_handler(int signum)
@@ -100,7 +130,7 @@ void signal_handler(int signum)
     }
 }
 
-void ExecutaComando(char **args, int foreground)
+void ExecutaComando(char **args, int foreground, tBackgroundProcess *bp)
 {
     pid_t pid = fork();
 
@@ -112,9 +142,23 @@ void ExecutaComando(char **args, int foreground)
     else if (pid == 0)
     {
         // Processo filho
-        pid_t session=setsid();
+        if (foreground)
+        {
+            // Configura o grupo de processos para o processo filho em foreground
+            setpgid(0, 0);
+        }
+
+        for (int i = 0; i < 1000; i++)
+        {
+            if (bp[i].background_process_id == -1)
+            {
+                bp[i].background_process_id = pid;
+                bp[i].session_process_id = session_process_value;
+                break;
+            }
+        }
+
         execvp(args[0], args);
-        printf("Process session : %d\n", session);
         perror("Erro ao executar o comando");
         exit(1);
     }
@@ -124,27 +168,64 @@ void ExecutaComando(char **args, int foreground)
         if (foreground)
         {
             foreground_process = pid;
+            foreground_pid = pid;
             waitpid(pid, NULL, 0);
             foreground_process = 0;
+            foreground_pid = 0;
         }
         else
         {
-            // Não espera pelo processo filho se for executado em segundo plano
+            // Processo em segundo plano
+            if (process_group == 0)
+            {
+                // Se não houver grupo de processos ainda, define o grupo do primeiro processo
+                process_group = pid;
+                setpgid(pid, process_group);
+            }
+            else
+            {
+                // Adiciona o processo ao grupo de processos existente
+                setpgid(pid, process_group);
+            }
+
             printf("Processo iniciado em segundo plano com PID %d\n", pid);
         }
     }
 }
+
 void handle_sigusr1(int signum)
 {
     if (foreground_process > 0)
     {
         kill(foreground_process, SIGUSR1);
     }
+    else
+    {
+        pid_t pid = getpid();
+        pid_t session;
+
+        for (int i = 0; i < 1000; i++)
+        {
+            if (pid == bp[i].background_process_id)
+            {
+                session = bp[i].session_process_id;
+                break;
+            }
+        }
+
+        for (int i = 0; i < 1000; i++)
+        {
+            if (session == bp[i].session_process_id)
+            {
+                kill(pid, SIGUSR1);
+            }
+        }
+    }
 
     exit(0);
 }
 
-void TrataEntrada(char *input)
+void TrataEntrada(char *input, tBackgroundProcess *bp)
 {
     char *comandos[MAX_COMMANDS];
     int num_comandos = 0;
@@ -187,6 +268,6 @@ void TrataEntrada(char *input)
         args[num_args] = NULL;
 
         // Executa o comando
-        ExecutaComando(args, foreground);
+        ExecutaComando(args, foreground, bp);
     }
 }
