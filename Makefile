@@ -1,3 +1,7 @@
+# INTEGRANTES:
+# Matheus Lopes Ferreira Lima
+# Matheus de Oliveira Lima
+
 CC = gcc
 CFLAGS = -Wall -Wextra
 
